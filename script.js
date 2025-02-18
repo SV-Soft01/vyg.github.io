@@ -1,20 +1,106 @@
-const inventario = []
-const facturas = []
-const compras = []
-const cuentasCobrar = []
-const cuentasPagar = []
-const ingresos = []
-const gastos = []
-const capital = {
+// Inicialización de variables globales
+let inventario = []
+let facturas = []
+let compras = []
+let cuentasCobrar = []
+let cuentasPagar = []
+let ingresos = []
+let gastos = []
+let capital = {
   productos: 0,
   efectivo: 0,
 }
 let ganancias = 0
+let usuarioActual = null
 
+// Función para mostrar una sección
 function mostrarSeccion(seccion) {
   document.querySelectorAll(".seccion").forEach((s) => (s.style.display = "none"))
   document.getElementById(seccion).style.display = "block"
 }
+
+// Función para guardar datos en el almacenamiento local
+function guardarDatos() {
+  const datos = {
+    inventario,
+    facturas,
+    compras,
+    cuentasCobrar,
+    cuentasPagar,
+    ingresos,
+    gastos,
+    capital,
+    ganancias,
+  }
+  localStorage.setItem(`datos_${usuarioActual}`, JSON.stringify(datos))
+}
+
+// Función para cargar datos del almacenamiento local
+function cargarDatos() {
+  const datosGuardados = localStorage.getItem(`datos_${usuarioActual}`)
+  if (datosGuardados) {
+    const datos = JSON.parse(datosGuardados)
+    inventario = datos.inventario || []
+    facturas = datos.facturas || []
+    compras = datos.compras || []
+    cuentasCobrar = datos.cuentasCobrar || []
+    cuentasPagar = datos.cuentasPagar || []
+    ingresos = datos.ingresos || []
+    gastos = datos.gastos || []
+    capital = datos.capital || { productos: 0, efectivo: 0 }
+    ganancias = datos.ganancias || 0
+  }
+}
+
+// Manejo del formulario de inicio de sesión
+document.getElementById("loginForm").addEventListener("submit", (e) => {
+  e.preventDefault()
+  const username = document.getElementById("loginUsername").value
+  const password = document.getElementById("loginPassword").value
+
+  const usuarios = JSON.parse(localStorage.getItem("usuarios")) || {}
+  if (usuarios[username] && usuarios[username].password === password) {
+    usuarioActual = username
+    document.getElementById("companyName").textContent = usuarios[username].empresa
+    document.getElementById("mainNav").style.display = "block"
+    cargarDatos()
+    mostrarSeccion("inventario")
+    actualizarTablaInventario()
+    actualizarTablaFacturas()
+    actualizarTablaCuentasCobrar()
+    actualizarTablaCompras()
+    actualizarTablaCuentasPagar()
+    actualizarGanancias()
+    actualizarCapital()
+  } else {
+    alert("Credenciales incorrectas")
+  }
+})
+
+// Manejo del formulario de registro
+document.getElementById("registroForm").addEventListener("submit", (e) => {
+  e.preventDefault()
+  const username = document.getElementById("registroUsername").value
+  const password = document.getElementById("registroPassword").value
+  const empresa = document.getElementById("registroEmpresa").value
+  const clave = document.getElementById("registroClave").value
+
+  if (clave !== "12345") {
+    alert("Clave de seguridad incorrecta")
+    return
+  }
+
+  const usuarios = JSON.parse(localStorage.getItem("usuarios")) || {}
+  if (usuarios[username]) {
+    alert("El nombre de usuario ya existe")
+    return
+  }
+
+  usuarios[username] = { password, empresa }
+  localStorage.setItem("usuarios", JSON.stringify(usuarios))
+  alert("Registro exitoso. Por favor, inicia sesión.")
+  mostrarSeccion("login")
+})
 
 document.getElementById("btnAgregarProducto").addEventListener("click", () => {
   const form = document.getElementById("formInventario")
@@ -40,18 +126,18 @@ document.getElementById("formInventario").addEventListener("submit", function (e
 
   const index = inventario.findIndex((p) => p.codigo === producto.codigo)
   if (index !== -1) {
-    const cantidadAnterior = inventario[index].cantidad
-    inventario[index] = producto
-    capital.productos += (producto.cantidad - cantidadAnterior) * producto.precioCompra
-  } else {
-    inventario.push(producto)
-    capital.productos += producto.cantidad * producto.precioCompra
+    alert("Ya existe un producto con este código. Por favor, use un código diferente.")
+    return
   }
+
+  inventario.push(producto)
+  capital.productos += producto.cantidad * producto.precioCompra
 
   actualizarTablaInventario()
   this.reset()
   this.style.display = "none"
   actualizarCapital()
+  guardarDatos()
 })
 
 document.getElementById("btnCancelarEdicion").addEventListener("click", function () {
@@ -135,6 +221,7 @@ function eliminarProducto(index) {
     inventario.splice(index, 1)
     actualizarTablaInventario()
     actualizarCapital()
+    guardarDatos()
   }
 }
 
@@ -164,6 +251,7 @@ function importarDesdeExcel() {
     })
     actualizarTablaInventario()
     actualizarCapital()
+    guardarDatos()
   }
   reader.readAsArrayBuffer(file)
 }
@@ -237,25 +325,22 @@ function eliminarProductoFactura(index) {
   actualizarTablaFactura()
 }
 
-
 function finalizarFactura() {
   const cliente = document.getElementById("clienteFactura").value.trim()
   const fecha = document.getElementById("fechaFactura").value
   const total = Number.parseFloat(document.getElementById("totalFactura").textContent)
   const tipoFactura = document.getElementById("tipoFactura").value
- 
+
   if (cliente === "") {
     alert("Por favor, ingrese el nombre del cliente.")
     return
-}   
-
+  }
 
   if (productosEnFactura.length === 0) {
     alert("No hay productos en la factura. Añada productos antes de finalizar.")
     return
   }
-  
-  
+
   let gananciaFactura = 0
   productosEnFactura.forEach((p) => {
     const productoInventario = inventario.find((inv) => inv.codigo === p.codigo)
@@ -271,8 +356,8 @@ function finalizarFactura() {
   if (tipoFactura === "contado") {
     facturas.push(factura)
     ganancias += gananciaFactura
-    capital.efectivo += total - gananciaFactura
-    ingresos.push({ fecha, monto: total , descripcion: `Factura al contado - ${cliente}`, etiqueta: "Venta" })
+    capital.efectivo += total
+    ingresos.push({ fecha, monto: total, descripcion: `Factura al contado - ${cliente}`, etiqueta: "Venta" })
   } else {
     cuentasCobrar.push(factura)
   }
@@ -290,6 +375,7 @@ function finalizarFactura() {
   document.getElementById("totalFactura").textContent = "0"
 
   alert("Factura emitida correctamente")
+  guardarDatos()
 }
 
 function actualizarTablaFacturas() {
@@ -344,17 +430,17 @@ function registrarPagoCuentaCobrar(index) {
   actualizarGanancias()
   actualizarCapital()
   alert("Pago registrado correctamente")
+  guardarDatos()
 }
 
 function verDetallesCuentaCobrar(index) {
   const factura = cuentasCobrar[index]
   alert(`Detalles de la factura:
-    Cliente: ${factura.cliente}
-    Fecha: ${factura.fecha}
-    Total: ${factura.total.toFixed(2)}
-    Productos: ${factura.productos.map((p) => `${p.nombre} (${p.cantidad})`).join(", ")}`)
+  Cliente: ${factura.cliente}
+  Fecha: ${factura.fecha}
+  Total: ${factura.total.toFixed(2)}
+  Productos: ${factura.productos.map((p) => `${p.nombre} (${p.cantidad})`).join(", ")}`)
 }
-document.getElementById("fechaCompra").value = new Date().toLocaleDateString()
 
 document.getElementById("formCompra").addEventListener("submit", (e) => {
   e.preventDefault()
@@ -362,7 +448,6 @@ document.getElementById("formCompra").addEventListener("submit", (e) => {
 })
 
 let productosEnCompra = []
-
 
 function agregarProductoCompra() {
   const codigo = document.getElementById("productoCompraSeleccionado").value
@@ -504,6 +589,7 @@ function finalizarCompra() {
   document.getElementById("totalCompra").textContent = "0"
 
   alert("Compra registrada correctamente")
+  guardarDatos()
 }
 
 function actualizarTablaCompras() {
@@ -525,10 +611,10 @@ function actualizarTablaCompras() {
 function verDetallesCompra(index) {
   const compra = compras[index]
   alert(`Detalles de la compra:
-    Proveedor: ${compra.proveedor}
-    Fecha: ${compra.fecha}
-    Total: ${compra.total.toFixed(2)}
-    Productos: ${compra.productos.map((p) => `${p.nombre} (${p.cantidad})`).join(", ")}`)
+  Proveedor: ${compra.proveedor}
+  Fecha: ${compra.fecha}
+  Total: ${compra.total.toFixed(2)}
+  Productos: ${compra.productos.map((p) => `${p.nombre} (${p.cantidad})`).join(", ")}`)
 }
 
 function actualizarTablaCuentasPagar() {
@@ -564,15 +650,16 @@ function registrarPagoCuentaPagar(index) {
   actualizarTablaCuentasPagar()
   actualizarCapital()
   alert("Pago registrado correctamente")
+  guardarDatos()
 }
 
 function verDetallesCuentaPagar(index) {
   const compra = cuentasPagar[index]
   alert(`Detalles de la compra a crédito:
-    Proveedor: ${compra.proveedor}
-    Fecha: ${compra.fecha}
-    Total: ${compra.total.toFixed(2)}
-    Productos: ${compra.productos.map((p) => `${p.nombre} (${p.cantidad})`).join(", ")}`)
+  Proveedor: ${compra.proveedor}
+  Fecha: ${compra.fecha}
+  Total: ${compra.total.toFixed(2)}
+  Productos: ${compra.productos.map((p) => `${p.nombre} (${p.cantidad})`).join(", ")}`)
 }
 
 document.getElementById("formIngresoGasto").addEventListener("submit", function (e) {
@@ -593,6 +680,7 @@ document.getElementById("formIngresoGasto").addEventListener("submit", function 
   actualizarRegistros()
   this.reset()
   alert(`${tipo.charAt(0).toUpperCase() + tipo.slice(1)} registrado correctamente.`)
+  guardarDatos()
 })
 
 function actualizarGanancias() {
@@ -645,6 +733,7 @@ document.getElementById("formCapital").addEventListener("submit", function (e) {
   actualizarCapital()
   alert(`Se ha añadido ${monto.toFixed(2)} al capital. Descripción: ${descripcion}`)
   this.reset()
+  guardarDatos()
 })
 
 function anadirGananciasCapital() {
@@ -663,6 +752,7 @@ function anadirGananciasCapital() {
   actualizarGanancias()
   alert(`Se han añadido ${monto.toFixed(2)} de las ganancias al capital.`)
   document.getElementById("montoGananciasCapital").value = ""
+  guardarDatos()
 }
 
 function restarCapital() {
@@ -679,6 +769,7 @@ function restarCapital() {
   actualizarCapital()
   alert(`Se han restado ${monto.toFixed(2)} del capital.`)
   document.getElementById("montoRestarCapital").value = ""
+  guardarDatos()
 }
 
 function actualizarRegistros() {
@@ -835,7 +926,7 @@ function calcularVuelto() {
 
 // Inicialización
 window.onload = () => {
-  mostrarSeccion("inventario")
+  mostrarSeccion("login")
   actualizarTablaInventario()
   actualizarCapital()
   actualizarGanancias()
@@ -846,14 +937,16 @@ window.onload = () => {
 }
 
 // script.js
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('El DOM está listo.');
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("El DOM está listo.")
 
-    // Aquí puedes poner cualquier manipulación del DOM, como cambiar el título.
-    const title = document.querySelector('h1');
-    title.textContent = 'Bienvenido a Chave Medicina';
+  // Aquí puedes poner cualquier manipulación del DOM, como cambiar el título.
+  const title = document.querySelector("h1")
+  title.textContent = "Bienvenido a SV Soft"
 
-    // Otras interacciones con el DOM
-    const paragraph = document.querySelector('p');
-    paragraph.style.color = 'blue';
-});
+  // Otras interacciones con el DOM
+  const paragraph = document.querySelector("p")
+  if (paragraph) {
+    paragraph.style.color = "blue"
+  }
+})
